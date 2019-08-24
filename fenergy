@@ -1,0 +1,77 @@
+#! /bin/csh -f
+# VASP run command
+#
+set nc = `awk '{print $1}' compound_num.txt`
+set n = 1
+while (${n} <= ${nc})
+  set n1 = `echo "((${n}-1)*4+1)" | bc`
+  set n2 = `echo "((${n}-1)*4+2)" | bc`
+  set n3 = `echo "((${n}-1)*4+3)" | bc`
+  set n4 = `echo "((${n}-1)*4+4)" | bc`
+  set atom_list=`sed -n ${n2}p compound_total_energy.txt`
+  set atom_num=`sed -n ${n3}p compound_total_energy.txt`
+  sed -n ${n4}p compound_total_energy.txt > formation_energy
+  awk -v p="${n4}" 'NR==p {print $5}' compound_total_energy.txt > formation_energy
+  #cat formation_energy
+  #awk 'NR==4 {print $5}' compound_total_energy.txt > formation_energy
+  set No = 0
+  #echo "----------------"
+  foreach atom_name ( ${atom_list} )
+    @ No += 1
+    #echo ${atom_name}
+    set atom_line = `grep -e ${atom_name} -n atom_total_energy.txt | sed -e 's/:.*//g'`
+    #echo ${atom_line}
+    set atom_total_energy_num = `awk -v p="${atom_line}" 'NR==(p+1) {print $1}' atom_total_energy.txt`
+    set atom_total_energy_unitcell = `awk -v p="${atom_line}" 'NR==(p+2) {print $5}' atom_total_energy.txt`
+    set atom_total_energy = `echo "${atom_total_energy_unitcell}/${atom_total_energy_num}" | bc -l`
+    #echo ${atom_total_energy}" eV/atom"
+    if(${No} == 1)then
+      set natom = `awk -v n="${n3}" 'NR==n {print $1}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $1, "atoms"}' compound_total_energy.txt
+    else if(${No} == 2)then
+      set natom = `awk -v n="${n3}" 'NR==n {print $2}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $2, "atoms"}' compound_total_energy.txt
+    else if(${No} == 3)then
+      set natom = `awk -v n="${n3}" 'NR==n {print $3}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $3, "atoms"}' compound_total_energy.txt
+    else if(${No} == 4)then
+      set natom = `awk -v n="${n3}" 'NR==n {print $4}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $4, "atoms"}' compound_total_energy.txt
+    else if(${No} == 5)then
+      set natom = `awk -v n="${n3}" 'NR==n {print $5}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $5, "atoms"}' compound_total_energy.txt
+    else if(${No} == 6)
+      set natom = `awk -v n="${n3}" 'NR==n {print $6}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $6, "atoms"}' compound_total_energy.txt
+    else if(${No} == 7)then
+      set natom = `awk -v n="${n3}" 'NR==n {print $7}' compound_total_energy.txt`
+      set AETOT = `echo "${natom}*${atom_total_energy}" | bc`
+      #awk -v n="${n3}" 'NR==n {print $7, "atoms"}' compound_total_energy.txt
+    endif
+    #echo "total energy: "${AETOT} " eV"
+    awk -v p="${AETOT}" '{print $1-p}' formation_energy > formation_energy_temp
+    awk '{print $1}' formation_energy_temp > formation_energy
+    #cat formation_energy
+    #echo "----------------"
+  end
+  #
+  echo "----------------" >> formation_energy.txt
+  sed -n ${n1}p compound_total_energy.txt >> formation_energy.txt
+  #echo ${atom_list} >> formation_energy.txt
+  #echo ${atom_num} >> formation_energy.txt
+  awk '{print "formation energy: ", $1, "eV"}' formation_energy >> formation_energy.txt
+  #
+  cat formation_energy.txt
+  #
+  rm -f formation_energy_temp
+  rm -f formation_energy
+  #
+  @ n = $n + 1
+end
+#

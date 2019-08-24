@@ -1,0 +1,188 @@
+#! /bin/csh -f
+# VASP run command
+#
+# user settting
+#set vasp_adress = $HOME'/vasp/vasp.5.3/vasp'
+set vasp_adress = $HOME'/vasp/vasp.5.4.1/bin/vasp_std'
+set pseudo_potential_adress = $HOME'/vasp/potpaw_PBE'
+set standard_input_adress = $HOME'/Desktop/Link to vasp_work/standard_input_files'
+#
+# Automatically setting
+setenv OMP_NUM_THREADS 1
+set node = `grep 'physical id' /proc/cpuinfo | sort -u | wc -l`
+set num_core = `grep 'core id' /proc/cpuinfo | sort -u | wc -l`
+echo ""
+set DATE = `date`
+echo $DATE
+echo "Automatically setting environments"
+echo "------------------------------------------------------------"
+echo "OpenMP threads = 1"
+echo "automatic setting Parallel calculation (MPI) = "$num_core" core"" / ""$node"" node"
+set NPAR = `echo 4-"sqrt($num_core)" | bc`
+echo "automatic setting NPAR = "$NPAR
+sed 's/#NPAR/NPAR = '${NPAR}'/g' "${standard_input_adress}/INCAR_opt_template" > "${standard_input_adress}/INCAR_opt"
+sed 's/#NPAR/NPAR = '${NPAR}'/g' "${standard_input_adress}/INCAR_scf_template" > "${standard_input_adress}/INCAR_scf"
+sed 's/#NPAR/NPAR = '${NPAR}'/g' "${standard_input_adress}/INCAR_dos_template" > "${standard_input_adress}/INCAR_dos"
+echo "------------------------------------------------------------"
+echo $vasp_adress
+echo $pseudo_potential_adress
+echo $standard_input_adress
+echo "------------------------------------------------------------"
+#
+# current adress setting
+set address = `pwd`
+echo "$address"
+echo "$address" >> "$address/log"
+set DATE = `date`
+echo "start: "$DATE > "$address/log"
+#
+# get cif data
+set cif_list=`ls *.cif`
+foreach cif_name ( $cif_list )
+  # remove extension
+  set cif_folder_name = `echo $cif_name:r`
+  mkdir ${cif_folder_name}
+  cp "$address/$cif_name" "$address/${cif_folder_name}/$cif_name"
+end
+echo "include"
+set list=`find . -maxdepth 1 -mindepth 1 -type d | awk -F/ '{print $NF}'`
+echo $list
+echo "folder list: "$list >> "$address/log"
+echo "------------------------------------------------------------"
+#
+# make directory
+mkdir graph
+mkdir cif
+# initial setting
+echo `date` > fermi_energy.txt
+echo `date` > total_energy.txt
+# setting for formation energy calculation
+set compound_no = 0
+#
+# loop
+foreach folder_name_list ( $cif_list )
+  set folder_name = `echo $folder_name_list:r`
+  echo "--------------------" >> "$address/log"
+  set DATE = `date`
+  echo $DATE >> "$address/log"
+  #
+  echo ""
+  echo "vasp calculation start: ""$folder_name"
+  echo ""
+  date
+  #
+  cd "$address/$folder_name"
+  echo "folder name: "$folder_name >> "$address/log"
+  echo "absolute adress: "`pwd` >> "$address/log"
+  #
+  echo "run cif2cell"
+  cif2cell -p vasp --setup-all --vasp-format=5 --vasp-encutfac=1.0 --vasp-pseudo-libdr="${pseudo_potential_adress}" --vasp-cartesian-lattice-vectors -f *.cif
+  cp INCAR INCAR_cif2cell
+  #
+  echo "set standard input files"
+  cp "${standard_input_adress}/INCAR_opt" INCAR_opt
+  cp "${standard_input_adress}/INCAR_scf" INCAR_scf
+  cp "${standard_input_adress}/INCAR_dos" INCAR_dos
+  cp "${standard_input_adress}/gplot" "$address/gplot"
+  cp "${standard_input_adress}/fenergy" "$address/fenergy"
+  chmod +x "$address/gplot"
+  chmod +x "$address/fenergy"
+  # structure optimization
+  date
+  set DATE = `date`
+  echo "optimize structure calculation"
+  echo "optimize structure calculation: "$DATE >> "$address/log"
+  mpirun -np $num_core $vasp_adress # run opt calculation
+  cp OUTCAR OUTCAR_opt
+  cp CONTCAR POSCAR
+  # scf calculation (use optimized structure)
+  date
+  set DATE = `date`
+  echo "scf calculation"
+  echo "scf calculation: "$DATE >> "$address/log"
+  cp INCAR_scf INCAR
+  mpirun -np $num_core $vasp_adress # run scf calculation
+  cp OUTCAR OUTCAR_scf
+  # dos calculation
+  date
+  set DATE = `date`
+  echo "dos calculation"
+  echo "dos calculation: "$DATE >> "$address/log"
+  # setting automatically dos energy range
+  grep "Fermi energy:" OUTCAR | tail -1 > fermi_temp1
+  awk '{print $4}' fermi_temp1 > fermi_energy_temp1
+  sed -e 's/;.*//g' fermi_energy_temp1 > fermi_energy_temp2
+  set fermi_energy = `sed -n 1p fermi_energy_temp2`
+  set energy_min = `echo "${fermi_energy} - 13.0" | bc -l`
+  set energy_max = `echo "${fermi_energy} + 6.0" | bc -l`
+  cp INCAR_dos INCAR_dos_temp
+  sed -e 's/#ELOW#/'${energy_min}'/g' -e 's/#EHIGH#/'${energy_max}'/g' INCAR_dos_temp > INCAR_dos
+  rm -f fermi_temp1
+  rm -f fermi_energy_temp1
+  rm -f fermi_energy_temp2
+  rm -f fermi_energy
+  rm -f INCAR_dos_temp
+  #
+  cp KPOINTS_scf KPOINTS
+  cp INCAR_dos INCAR
+  mpirun -np $num_core $vasp_adress # run dos calculation
+  cp OUTCAR OUTCAR_dos
+  # data file
+  date
+  grep "Fermi energy:" OUTCAR | tail -1 >> "$address/log"
+  grep "TOTEN" OUTCAR | tail -1 >> "$address/log"
+  # new file
+  echo "folder name: " "$folder_name" >> "$address/fermi_energy.txt"
+  grep "Fermi energy:" OUTCAR | tail -1 >> "$address/fermi_energy.txt"
+  echo "$folder_name" >> "$address/total_energy.txt"
+  grep "TOTEN" OUTCAR | tail -1 >> "$address/total_energy.txt"
+  # formation energy data
+  set atom_chara = `awk 'NR==6 {print $1}' POSCAR`
+  set check_single = `awk 'NR==6 {print $2}' POSCAR`
+  if(${check_single} == "")then
+    echo $atom_chara >> "$address/atom_total_energy.txt"
+    sed -n 7p POSCAR >> "$address/atom_total_energy.txt"
+    grep "TOTEN" OUTCAR | tail -1 >> "$address/atom_total_energy.txt"
+  else
+    @ compound_no += 1
+    echo "${compound_no}"
+    echo "${compound_no}" > "$address/compound_num.txt"
+    #echo ${compound_no} >> "$address/compound_total_energy.txt"
+    echo "$folder_name" >> "$address/compound_total_energy.txt"
+    sed -n 6p POSCAR >> "$address/compound_total_energy.txt"
+    sed -n 7p POSCAR >> "$address/compound_total_energy.txt"
+    grep "TOTEN" OUTCAR | tail -1 >> "$address/compound_total_energy.txt"
+  endif
+  # calculating file
+  echo "folder name: " "$folder_name" >> "$address/$folder_name/log"
+  grep "Fermi energy:" OUTCAR | tail -1 >> "$address/$folder_name/log"
+  echo "$folder_name" >> "$address/$folder_name/log"
+  grep "TOTEN" OUTCAR | tail -1 >> "$address/$folder_name/log"
+  # dos plot data
+  set DATE = `date`
+  echo "dos plot: "$DATE >> $address/log
+  sed -n 6p DOSCAR > dos_num_line
+  awk '{print $3}' dos_num_line > dos_num
+  set end_line = `sed -n 1p dos_num`
+  @ end_line += 6
+  sed -n 7,${end_line}p DOSCAR > tdos_temp
+  awk '{print $4}' dos_num_line > fermi_temp
+  set fermi_energy = `sed -n 1p fermi_temp`
+  echo "${fermi_energy}"
+  awk -v p="${fermi_energy}" '{print $1-p,$2,$3}' tdos_temp > tdos
+  awk -v p="${fermi_energy}" '{print $1-p,$2,$3}' tdos_temp > "tdos_$folder_name"
+  cp "tdos_$folder_name" "$address/graph/tdos_$folder_name"
+  rm -f dos_num_line
+  rm -f dos_num
+  rm -f tdos_temp
+  rm -f fermi_temp
+  echo "$folder_name" >> "$address/$folder_name/title"
+  # dos plot
+  "$standard_input_adress/gplot"
+  cp *.ps "$address/graph/${folder_name}.ps"
+  mv "$address/$folder_name.cif" "$address/cif/$folder_name.cif"
+  rm -f title
+end
+# go back adress
+cd "$address"
+#

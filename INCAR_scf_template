@@ -1,0 +1,72 @@
+#NPAR
+
+#
+SYSTEM = system
+# Common
+ALGO = Fast
+EDIFF = 1.0E-5
+#EDIFF = 0.0001
+EDIFFG = -0.01
+LREAL = Auto
+LWAVE = .TRUE.
+#LCHARG = .TRUE
+#LVTOT = .TRUE
+#MAGMON = 0 0 1
+#NELM = 200
+#NPAR= 1
+PREC = Accurate
+#ISTART = 0
+
+# cut off energy
+ENCUT = 500
+
+#spin 2, nonspin 1
+#ISPIN = 2
+
+#XC potential
+GGA = PE
+
+#SCF
+ISMEAR = -5
+SIGMA = 0.2
+NSW = 100
+IBRION = 2
+ICHARG = 1
+LORBIT = 11
+
+#SCF OPTIMIZATION
+#ISIF = 3
+
+#SCF energy range Ry
+#EINT -3 30
+
+# NBANDS, see OUTCAR, for HRplot
+#NBANDS = 580
+
+#DOS
+#ISMEAR = -5
+#NSW = 0
+#IBRION = -1
+#ICHARG = 11
+#LORBIT = 11
+
+#DOS range eV
+#EMIN = -15.0
+#EMAX = 15.0
+#NEDOS = 6001
+
+#EMIN = -10.0
+#EMAX = 17.0
+#NEDOS = 1001
+
+#band
+#ICHARG=11 #charge read file
+#ISMEAR = 0; SIGMA = 0.1;
+#LORBIT=11
+
+## HSE
+#LHFCALC = .TRUE. ; HFSCREEN = 0.2 ; AEXX = 0.25
+#ALGO = D ; TIME = 0.4 ; LDIAG = .TRUE.
+
+##VASP2WANNIER
+#LWANNIER90=.TRUE.
